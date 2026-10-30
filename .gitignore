@@ -1,0 +1,14 @@
+.DS_Store
+Thumbs.db
+.env
+.env.*
+!.env.example
+api/.env
+api/database/*.sqlite
+api/database/*.sqlite-*
+api/vendor/
+api/storage/*.key
+web/node_modules/
+web/.next/
+web/out/
+web/coverage/

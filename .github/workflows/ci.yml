@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: school_erp
+          POSTGRES_USER: school_erp
+          POSTGRES_PASSWORD: school_erp
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U school_erp -d school_erp"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: mbstring, pdo_pgsql, sqlite3, pdo_sqlite
+          coverage: none
+
+      - name: Install API dependencies
+        working-directory: api
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Check API dependency advisories
+        working-directory: api
+        run: composer audit --no-interaction
+
+      - name: Validate PostgreSQL migrations
+        working-directory: api
+        env:
+          APP_ENV: production
+          APP_KEY: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+          DB_DATABASE: school_erp
+          DB_USERNAME: school_erp
+          DB_PASSWORD: school_erp
+        run: php artisan migrate --force
+
+      - name: Run API workflow and permission tests
+        working-directory: api
+        run: php artisan test
+
+      - name: Check PHP formatting
+        working-directory: api
+        run: >-
+          vendor/bin/pint --test
+          app/Http/Controllers/Api/AdvancedOperationsController.php
+          app/Http/Controllers/Api/OperationsAdministrationController.php
+          app/Models/AssetLifecycleEvent.php
+          app/Models/OperationalExpense.php
+          app/Models/SchoolAsset.php
+          app/Models/SchoolEvent.php
+          database/migrations/2026_10_30_000009_create_operations_administration_tables.php
+          database/seeders/AccessControlSeeder.php
+          routes/api.php
+          tests/Feature/OperationsAdministrationApiTest.php
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Check production dependency advisories
+        working-directory: web
+        run: npm audit --omit=dev
+
+      - name: Lint, type-check and build frontend
+        working-directory: web
+        run: |
+          npm run lint
+          npx tsc --noEmit
+          npm run build
